@@ -1,8 +1,22 @@
 import { useState, useEffect, useRef } from "react";
+
+
+import { db } from "../firebase";
+import {
+  collection,
+  getDocs,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  query,
+  orderBy
+} from "firebase/firestore";
+
 import ModuloIntervento from "./ModuloIntervento";
 import Storico from "./Storico";
 
-const STORAGE_KEY = "clienti_app_v2";
+
 
 const MESI = [
   "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
@@ -247,19 +261,26 @@ export default function Clienti() {
   const [form, setForm] = useState(emptyForm);
   const [editForm, setEditForm] = useState(emptyForm);
 
-  useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-      setClienti(saved);
-      setFiltered(saved);
-    } catch (e) {
-      setClienti([]);
-    }
-  }, []);
+
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(clienti));
-  }, [clienti]);
+    async function caricaClienti() {
+      try {
+        const q = query(collection(db, "clienti"), orderBy("dataInserimento", "desc"));
+        const snapshot = await getDocs(q);
+        const lista = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        setClienti(lista);
+        setFiltered(lista);
+      } catch (e) {
+        console.error("Errore caricamento clienti:", e);
+        setClienti([]);
+      }
+    }
+    caricaClienti();
+  }, []);
+
+
+
 
   useEffect(() => {
     let result = [...clienti];
@@ -345,26 +366,48 @@ export default function Clienti() {
     return clienti.some((c, i) => i !== excludeIdx && c.piva.trim() === piva.trim());
   }
 
-  function handleAdd() {
+
+
+
+
+  async function handleAdd() {
     if (!form.azienda.trim()) { showToast("Inserisci il nome azienda", "error"); return; }
     if (!form.piva.trim()) { showToast("Inserisci la partita IVA", "error"); return; }
     if (!pivaValida(form.piva)) { showToast("La partita IVA deve contenere esattamente 11 cifre numeriche", "error"); return; }
     if (pivaEsiste(form.piva)) { showToast("Partita IVA già presente!", "error"); return; }
-    const nuovo = {
-      ...form,
-      dataInserimento: form.dataInserimento ? form.dataInserimento + "T12:00:00.000Z" : new Date().toISOString(),
-    };
-    setClienti((prev) => [nuovo, ...prev]);
-    setForm({ ...emptyForm, dataInserimento: new Date().toISOString().split("T")[0] });
-    setTab("lista");
-    showToast("Cliente salvato con successo");
+    try {
+      const nuovo = {
+        ...form,
+        dataInserimento: form.dataInserimento ? form.dataInserimento + "T12:00:00.000Z" : new Date().toISOString(),
+      };
+      const docRef = await addDoc(collection(db, "clienti"), nuovo);
+      setClienti((prev) => [{ id: docRef.id, ...nuovo }, ...prev]);
+      setForm({ ...emptyForm, dataInserimento: new Date().toISOString().split("T")[0] });
+      setTab("lista");
+      showToast("Cliente salvato con successo");
+    } catch (e) {
+      console.error("Errore salvataggio cliente:", e);
+      showToast("Errore nel salvataggio", "error");
+    }
   }
 
-  function handleDelete() {
-    setClienti((prev) => prev.filter((_, i) => i !== deleteModal.idx));
-    setDeleteModal({ open: false, idx: -1, nome: "" });
-    showToast("Cliente eliminato", "error");
+
+
+  async function handleDelete() {
+    try {
+      const clienteId = clienti[deleteModal.idx].id;
+      await deleteDoc(doc(db, "clienti", clienteId));
+      setClienti((prev) => prev.filter((_, i) => i !== deleteModal.idx));
+      setDeleteModal({ open: false, idx: -1, nome: "" });
+      showToast("Cliente eliminato", "error");
+    } catch (e) {
+      console.error("Errore eliminazione cliente:", e);
+      showToast("Errore nell'eliminazione", "error");
+    }
   }
+
+
+
 
   function openEdit(idx) {
     setEditIdx(idx);
@@ -376,20 +419,38 @@ export default function Clienti() {
     setModalOpen(true);
   }
 
-  function handleSaveEdit() {
+
+
+
+
+
+
+  async function handleSaveEdit() {
     if (!editForm.azienda.trim()) { showToast("Inserisci il nome azienda", "error"); return; }
     if (!editForm.piva.trim()) { showToast("Inserisci la partita IVA", "error"); return; }
     if (!pivaValida(editForm.piva)) { showToast("La partita IVA deve contenere esattamente 11 cifre numeriche", "error"); return; }
     if (pivaEsiste(editForm.piva, editIdx)) { showToast("Partita IVA già presente!", "error"); return; }
-    const aggiornato = {
-      ...editForm,
-      dataInserimento: editForm.dataInserimento ? editForm.dataInserimento + "T12:00:00.000Z" : new Date().toISOString(),
-    };
-    setClienti((prev) => prev.map((c, i) => (i === editIdx ? aggiornato : c)));
-    setModalOpen(false);
-    setEditIdx(-1);
-    showToast("Modifiche salvate");
+    try {
+      const aggiornato = {
+        ...editForm,
+        dataInserimento: editForm.dataInserimento ? editForm.dataInserimento + "T12:00:00.000Z" : new Date().toISOString(),
+      };
+      const clienteId = clienti[editIdx].id;
+      await updateDoc(doc(db, "clienti", clienteId), aggiornato);
+      setClienti((prev) => prev.map((c, i) => (i === editIdx ? { id: clienteId, ...aggiornato } : c)));
+      setModalOpen(false);
+      setEditIdx(-1);
+      showToast("Modifiche salvate");
+    } catch (e) {
+      console.error("Errore modifica cliente:", e);
+      showToast("Errore nel salvataggio", "error");
+    }
   }
+
+
+
+
+
 
   const anniDisponibili = [
     ...new Set([

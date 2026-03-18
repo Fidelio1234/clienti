@@ -1,7 +1,17 @@
 import { useState, useEffect } from "react";
+import { db } from "../firebase";
+import {
+  collection,
+  getDocs,
+  deleteDoc,
+  doc,
+  query,
+  where,
+  orderBy
+} from "firebase/firestore";
 import ModuloIntervento from "./ModuloIntervento";
 
-const STORICO_KEY = "storico_interventi_v1";
+
 
 function fmtDate(iso) {
   if (!iso) return "—";
@@ -161,34 +171,56 @@ export default function Storico({ cliente, onClose }) {
   const [deleteModal, setDeleteModal] = useState({ open: false, id: null });
   const [toast, setToast] = useState(null);
 
+
+
+
   useEffect(() => {
-    try {
-      const tutti = JSON.parse(localStorage.getItem(STORICO_KEY) || "[]");
-      const filtrati = tutti.filter(i => i.pivaCliente === cliente?.piva);
-      setInterventi(filtrati);
-    } catch {
-      setInterventi([]);
+    async function caricaStorico() {
+      try {
+        const q = query(
+          collection(db, "storico_interventi"),
+          where("pivaCliente", "==", cliente?.piva || ""),
+          orderBy("dataSalvataggio", "desc")
+        );
+        const snapshot = await getDocs(q);
+        const lista = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        setInterventi(lista);
+      } catch (e) {
+        console.error("Errore caricamento storico:", e);
+        setInterventi([]);
+      }
     }
+    caricaStorico();
   }, [cliente]);
+
+
+
 
   function showToast(msg, type = "success") {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 2500);
   }
 
-  function eliminaIntervento(id) {
+
+
+
+
+
+  async function eliminaIntervento(id) {
     try {
-      const tutti = JSON.parse(localStorage.getItem(STORICO_KEY) || "[]");
-      const aggiornati = tutti.filter(i => i.id !== id);
-      localStorage.setItem(STORICO_KEY, JSON.stringify(aggiornati));
+      await deleteDoc(doc(db, "storico_interventi", id));
       setInterventi(prev => prev.filter(i => i.id !== id));
       setEspanso(null);
       setDeleteModal({ open: false, id: null });
       showToast("Intervento eliminato");
-    } catch {
+    } catch (e) {
+      console.error("Errore eliminazione:", e);
       showToast("Errore nell'eliminazione", "error");
     }
   }
+
+
+
 
   return (
     <>

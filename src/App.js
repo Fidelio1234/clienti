@@ -1,15 +1,13 @@
-
-import './App.css';
+import { useState } from "react";
+import Login from "./components/Login";
 import Clienti from "./components/clienti";
 
+export default function App() {
+  const [loggato, setLoggato] = useState(false);
 
-function App() {
-  return (
-    <div className="App">
-     <Clienti />
-    
-    </div>
-  );
+  if (!loggato) {
+    return <Login onAccesso={() => setLoggato(true)} />;
+  }
+
+  return <Clienti />;
 }
-
-export default App;

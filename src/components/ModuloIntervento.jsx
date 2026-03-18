@@ -81,23 +81,97 @@ function CheckTable({ items, check, onChange, extra }) {
   );
 }
 
-function FirmaBox({ label, canvasRef, onClear, onStart, onDraw, onStop }) {
+
+
+
+
+
+
+function FirmaBox({ label, canvasRef, onClear, solaLettura }) {
+  const setCanvasRef = (canvas) => {
+    canvasRef.current = canvas;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+    ctx.strokeStyle = "#111";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+
+    if (solaLettura) return;
+
+    let isDrawing = false;
+
+    function getPos(e) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      return {
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY
+      };
+    }
+
+    function start(e) {
+      e.preventDefault();
+      isDrawing = true;
+      const pos = getPos(e);
+      ctx.beginPath();
+      ctx.moveTo(pos.x, pos.y);
+    }
+
+    function move(e) {
+      e.preventDefault();
+      if (!isDrawing) return;
+      const pos = getPos(e);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
+    }
+
+    function stop() { isDrawing = false; }
+
+    canvas.addEventListener("mousedown", start);
+    canvas.addEventListener("mousemove", move);
+    canvas.addEventListener("mouseup", stop);
+    canvas.addEventListener("mouseleave", stop);
+    canvas.addEventListener("touchstart", start, { passive: false });
+    canvas.addEventListener("touchmove", move, { passive: false });
+    canvas.addEventListener("touchend", stop);
+  };
+
   return (
     <div>
       <div style={{ ...labelS, marginBottom: 4 }}>{label}</div>
       <div style={{ border: "0.5px solid #ccc", borderRadius: 6, overflow: "hidden", background: "#fafafa", position: "relative" }}>
-        <canvas ref={canvasRef} width={300} height={80}
-          style={{ display: "block", width: "100%", cursor: "crosshair", touchAction: "none" }}
-          onMouseDown={onStart} onMouseMove={onDraw} onMouseUp={onStop} onMouseLeave={onStop}
-          onTouchStart={onStart} onTouchMove={onDraw} onTouchEnd={onStop} />
-        <button className="no-print" onClick={onClear} style={{ position: "absolute", top: 3, right: 3, fontSize: 10, padding: "2px 6px", border: "0.5px solid #ccc", borderRadius: 4, background: "#fff", cursor: "pointer", color: "#888" }}>
-          Cancella
-        </button>
+        <canvas
+          ref={setCanvasRef}
+          width={300}
+          height={80}
+          style={{ display: "block", width: "100%", cursor: solaLettura ? "default" : "crosshair", touchAction: "none" }}
+        />
+        {!solaLettura && (
+          <button className="no-print" onClick={onClear}
+            style={{ position: "absolute", top: 3, right: 3, fontSize: 10, padding: "2px 6px", border: "0.5px solid #ccc", borderRadius: 4, background: "#fff", cursor: "pointer", color: "#888" }}>
+            Cancella
+          </button>
+        )}
       </div>
-      <div className="no-print" style={{ fontSize: 10, color: "#aaa", marginTop: 2, textAlign: "center" }}>Firma con mouse o dito</div>
+      {!solaLettura && (
+        <div className="no-print" style={{ fontSize: 10, color: "#aaa", marginTop: 2, textAlign: "center" }}>
+          Firma con mouse o dito
+        </div>
+      )}
     </div>
   );
 }
+
+
+
+
+
+
+
 
 // ===== STILI CONDIVISI =====
 const iS = { height: 27, padding: "0 7px", border: "0.5px solid #ccc", borderRadius: 5, background: "#fafafa", fontSize: 11, width: "100%", boxSizing: "border-box", fontFamily: "sans-serif" };
@@ -218,7 +292,6 @@ export default function ModuloIntervento({ cliente, onClose, datiIniziali = null
   const [savedToast, setSavedToast] = useState(null);
   const canvasClienteRef = useRef(null);
   const canvasClienteVPRef = useRef(null);
-  const isDrawingRef = useRef(false);
 
 
 
@@ -227,75 +300,95 @@ export default function ModuloIntervento({ cliente, onClose, datiIniziali = null
 
 
 
- async function salvaStorico() {
-  try {
-    const nuovoIntervento = {
-      pivaCliente: cliente?.piva || "",
-      aziendaCliente: cliente?.azienda || "",
-      dataSalvataggio: new Date().toISOString(),
-      tipoIntervento: dati.interventoRichiesto || "Intervento generico",
-      dati: { ...dati },
-    };
-    await addDoc(collection(db, "storico_interventi"), nuovoIntervento);
-    setSavedToast("✓ Salvato nello storico");
-    setTimeout(() => setSavedToast(null), 2500);
-  } catch (e) {
-    console.error("Errore salvataggio storico:", e);
-    setSavedToast("⚠ Errore nel salvataggio");
-    setTimeout(() => setSavedToast(null), 2500);
+
+  async function salvaStorico() {
+    try {
+      // Comprimi le firme in JPEG al 30% — pochissimi KB
+      function canvasToJpeg(ref) {
+        if (!ref.current) return null;
+        const canvas = ref.current;
+        // Crea canvas temporaneo con sfondo bianco
+        const temp = document.createElement("canvas");
+        temp.width = canvas.width;
+        temp.height = canvas.height;
+        const ctx = temp.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, temp.width, temp.height);
+        ctx.drawImage(canvas, 0, 0);
+        return temp.toDataURL("image/jpeg", 0.3);
+      }
+      const firmaCliente = canvasToJpeg(canvasClienteRef);
+      const firmaClienteVP = canvasToJpeg(canvasClienteVPRef);
+  
+      const nuovoIntervento = {
+        pivaCliente: cliente?.piva || "",
+        aziendaCliente: cliente?.azienda || "",
+        dataSalvataggio: new Date().toISOString(),
+        tipoIntervento: dati.interventoRichiesto || "Intervento generico",
+        dati: {
+          ...dati,
+          firmaCliente,
+          firmaClienteVP,
+        },
+      };
+      await addDoc(collection(db, "storico_interventi"), nuovoIntervento);
+      setSavedToast("✓ Salvato nello storico");
+      setTimeout(() => setSavedToast(null), 2500);
+    } catch (e) {
+      console.error("Errore salvataggio storico:", e);
+      setSavedToast("⚠ Errore nel salvataggio");
+      setTimeout(() => setSavedToast(null), 2500);
+    }
   }
-}
-
-
 
 
   const upd = (field) => (e) => setDati(p => ({ ...p, [field]: e.target.value }));
   const updVP = (field) => (e) => setDati(p => ({ ...p, vp: { ...p.vp, [field]: e.target.value } }));
   const updCheck = (key, val) => setDati(p => ({ ...p, vp: { ...p.vp, check: { ...p.vp.check, [key]: val } } }));
 
+
+
+
+
   useEffect(() => {
-    [canvasClienteRef, canvasClienteVPRef].forEach(ref => {
-      if (ref.current) {
-        const ctx = ref.current.getContext("2d");
-        ctx.strokeStyle = "#111";
-        ctx.lineWidth = 2;
-        ctx.lineCap = "round";
+    const timer = setTimeout(() => {
+      [canvasClienteRef, canvasClienteVPRef].forEach(ref => {
+        if (ref.current) {
+          const ctx = ref.current.getContext("2d");
+          ctx.strokeStyle = "#111";
+          ctx.lineWidth = 2;
+          ctx.lineCap = "round";
+        }
+      });
+  
+      if (solaLettura && dati.firmaCliente && canvasClienteRef.current) {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = canvasClienteRef.current;
+          if (canvas) canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        };
+        img.src = dati.firmaCliente;
       }
-    });
-  }, [tab]);
+      if (solaLettura && dati.firmaClienteVP && canvasClienteVPRef.current) {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = canvasClienteVPRef.current;
+          if (canvas) canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        };
+        img.src = dati.firmaClienteVP;
+      }
+    }, 50);
+  
+    return () => clearTimeout(timer);
+  }, [tab, solaLettura, dati.firmaCliente, dati.firmaClienteVP]);
 
-  function getPos(canvas, e) {
-    const rect = canvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    return { x: clientX - rect.left, y: clientY - rect.top };
-  }
 
-  function startDraw(canvasRef, e) {
-    e.preventDefault();
-    isDrawingRef.current = true;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    const pos = getPos(canvas, e);
-    ctx.beginPath();
-    ctx.moveTo(pos.x, pos.y);
-  }
 
-  function draw(canvasRef, e) {
-    e.preventDefault();
-    if (!isDrawingRef.current) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    const pos = getPos(canvas, e);
-    ctx.lineTo(pos.x, pos.y);
-    ctx.stroke();
-  }
 
-  function stopDraw() { isDrawingRef.current = false; }
 
-  function clearCanvas(canvasRef) {
+
+
+function clearCanvas(canvasRef) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
@@ -325,9 +418,8 @@ export default function ModuloIntervento({ cliente, onClose, datiIniziali = null
         label={canvasRef === canvasClienteRef ? "Timbro e Firma Cliente" : "Timbro e Firma Utente RT"}
         canvasRef={canvasRef}
         onClear={() => clearCanvas(canvasRef)}
-        onStart={e => startDraw(canvasRef, e)}
-        onDraw={e => draw(canvasRef, e)}
-        onStop={stopDraw}
+        solaLettura={solaLettura}
+        tab={tab}
       />
     </div>
   );
@@ -639,12 +731,10 @@ export default function ModuloIntervento({ cliente, onClose, datiIniziali = null
               </button>
             ))}
           </div>
-
-          {/* Contenuto schermo: solo tab attivo */}
-          <div className="screen-only" style={{ padding: "1.5rem", maxHeight: "70vh", overflowY: "auto" }}>
+{/* Contenuto schermo: entrambe le pagine sempre nel DOM, nascondo con CSS */}
+<div className="screen-only" style={{ padding: "1.5rem", maxHeight: "70vh", overflowY: "auto" }}>
             {tab === "rapporto" ? contentoPagina1 : contentoPagina2}
           </div>
-
           {/* Contenuto stampa: entrambe le pagine */}
           <div className="print-both">
             {contentoPagina1}

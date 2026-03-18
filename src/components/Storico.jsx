@@ -146,6 +146,34 @@ function DettaglioIntervento({ intervento, onRiapri, onElimina }) {
         </div>
       )}
 
+
+  {/* Firme */}
+  {(d?.firmaCliente || d?.firmaClienteVP) && (
+        <div style={{ marginBottom: "1rem" }}>
+          <SezDettaglio>Firme</SezDettaglio>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 8 }}>
+            {d?.firmaCliente && (
+              <div>
+                <div style={{ fontSize: 11, color: "#888", marginBottom: 4 }}>TIMBRO E FIRMA CLIENTE</div>
+                <div style={{ border: "0.5px solid #e0e0e0", borderRadius: 8, overflow: "hidden", background: "#fafafa" }}>
+                  <img src={d.firmaCliente} alt="Firma cliente" style={{ width: "100%", display: "block" }} />
+                </div>
+              </div>
+            )}
+            {d?.firmaClienteVP && (
+              <div>
+                <div style={{ fontSize: 11, color: "#888", marginBottom: 4 }}>TIMBRO E FIRMA UTENTE RT</div>
+                <div style={{ border: "0.5px solid #e0e0e0", borderRadius: 8, overflow: "hidden", background: "#fafafa" }}>
+                  <img src={d.firmaClienteVP} alt="Firma utente RT" style={{ width: "100%", display: "block" }} />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+
+
       {/* Azioni */}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, paddingTop: "0.75rem", borderTop: "0.5px solid #e0e0e0" }}>
         <button onClick={() => onElimina(intervento.id)} style={btnDanger}>🗑 Elimina</button>

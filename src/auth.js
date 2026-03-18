@@ -1,0 +1,1 @@
+export const PASSWORD_ACCESSO = "dmi2024";

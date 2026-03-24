@@ -87,15 +87,24 @@ function CheckTable({ items, check, onChange, extra }) {
 
 
 
-function FirmaBox({ label, canvasRef, onClear, solaLettura }) {
+function FirmaBox({ label, canvasRef, onClear, solaLettura, onSign, firmaImmagine }) {
+  const firmaRef = useRef(firmaImmagine);
+  firmaRef.current = firmaImmagine;
+
   const setCanvasRef = (canvas) => {
-    canvasRef.current = canvas;
     if (!canvas) return;
+    canvasRef.current = canvas;
 
     const ctx = canvas.getContext("2d");
     ctx.strokeStyle = "#111";
     ctx.lineWidth = 2;
     ctx.lineCap = "round";
+
+    if (firmaRef.current) {
+      const img = new Image();
+      img.onload = () => ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      img.src = firmaRef.current;
+    }
 
     if (solaLettura) return;
 
@@ -129,7 +138,20 @@ function FirmaBox({ label, canvasRef, onClear, solaLettura }) {
       ctx.stroke();
     }
 
-    function stop() { isDrawing = false; }
+    function stop() {
+      if (!isDrawing) return;
+      isDrawing = false;
+      if (onSign) {
+        const temp = document.createElement("canvas");
+        temp.width = canvas.width;
+        temp.height = canvas.height;
+        const ctx2 = temp.getContext("2d");
+        ctx2.fillStyle = "#ffffff";
+        ctx2.fillRect(0, 0, temp.width, temp.height);
+        ctx2.drawImage(canvas, 0, 0);
+        onSign(temp.toDataURL("image/jpeg", 0.3));
+      }
+    }
 
     canvas.addEventListener("mousedown", start);
     canvas.addEventListener("mousemove", move);
@@ -151,8 +173,13 @@ function FirmaBox({ label, canvasRef, onClear, solaLettura }) {
           style={{ display: "block", width: "100%", cursor: solaLettura ? "default" : "crosshair", touchAction: "none" }}
         />
         {!solaLettura && (
-          <button className="no-print" onClick={onClear}
-            style={{ position: "absolute", top: 3, right: 3, fontSize: 10, padding: "2px 6px", border: "0.5px solid #ccc", borderRadius: 4, background: "#fff", cursor: "pointer", color: "#888" }}>
+          <button className="no-print" onClick={() => {
+            if (canvasRef.current) {
+              canvasRef.current.getContext("2d").clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+            }
+            onClear();
+          }}
+          style={{ position: "absolute", top: 3, right: 3, fontSize: 10, padding: "2px 6px", border: "0.5px solid #ccc", borderRadius: 4, background: "#fff", cursor: "pointer", color: "#888" }}>
             Cancella
           </button>
         )}
@@ -165,6 +192,10 @@ function FirmaBox({ label, canvasRef, onClear, solaLettura }) {
     </div>
   );
 }
+
+
+
+
 
 
 
@@ -271,6 +302,7 @@ export default function ModuloIntervento({ cliente, onClose, datiIniziali = null
     valServizio: "",
     valQualitaPrezzo: "",
     rappresentante: "",
+    firmaCliente: null,
     vp: {
       nomeUtente: cliente?.azienda || "",
       pivaUtente: cliente?.piva || "",
@@ -305,6 +337,7 @@ export default function ModuloIntervento({ cliente, onClose, datiIniziali = null
     try {
       // Comprimi le firme in JPEG al 30% — pochissimi KB
       function canvasToJpeg(ref) {
+        console.log("canvas ref:", ref.current);
         if (!ref.current) return null;
         const canvas = ref.current;
         // Crea canvas temporaneo con sfondo bianco
@@ -317,8 +350,8 @@ export default function ModuloIntervento({ cliente, onClose, datiIniziali = null
         ctx.drawImage(canvas, 0, 0);
         return temp.toDataURL("image/jpeg", 0.3);
       }
-      const firmaCliente = canvasToJpeg(canvasClienteRef);
-      const firmaClienteVP = canvasToJpeg(canvasClienteVPRef);
+      const firmaCliente = dati.firmaCliente || canvasToJpeg(canvasClienteRef);
+      const firmaClienteVP = dati.firmaClienteVP || canvasToJpeg(canvasClienteVPRef);
   
       const nuovoIntervento = {
         pivaCliente: cliente?.piva || "",
@@ -388,10 +421,12 @@ export default function ModuloIntervento({ cliente, onClose, datiIniziali = null
 
 
 
-function clearCanvas(canvasRef) {
+  function clearCanvas(canvasRef) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+    if (canvasRef === canvasClienteRef) setDati(p => ({ ...p, firmaCliente: null }));
+    else setDati(p => ({ ...p, firmaClienteVP: null }));
   }
 
   function aggiornaReparto(idx, field, val) {
@@ -415,12 +450,15 @@ function clearCanvas(canvasRef) {
       </div>
       <FirmaTecnico />
       <FirmaBox
-        label={canvasRef === canvasClienteRef ? "Timbro e Firma Cliente" : "Timbro e Firma Utente RT"}
-        canvasRef={canvasRef}
-        onClear={() => clearCanvas(canvasRef)}
-        solaLettura={solaLettura}
-        tab={tab}
-      />
+  label={canvasRef === canvasClienteRef ? "Timbro e Firma Cliente" : "Timbro e Firma Utente RT"}
+  canvasRef={canvasRef}
+  onClear={() => clearCanvas(canvasRef)}
+  solaLettura={solaLettura}
+  onSign={(dataUrl) => {
+    if (canvasRef === canvasClienteRef) setDati(p => ({ ...p, firmaCliente: dataUrl }));
+    else setDati(p => ({ ...p, firmaClienteVP: dataUrl }));
+  }}
+/>
     </div>
   );
 
@@ -733,13 +771,13 @@ function clearCanvas(canvasRef) {
           </div>
 {/* Contenuto schermo: entrambe le pagine sempre nel DOM, nascondo con CSS */}
 <div className="screen-only" style={{ padding: "1.5rem", maxHeight: "70vh", overflowY: "auto" }}>
-            {tab === "rapporto" ? contentoPagina1 : contentoPagina2}
-          </div>
-          {/* Contenuto stampa: entrambe le pagine */}
-          <div className="print-both">
-            {contentoPagina1}
-            {contentoPagina2}
-          </div>
+  {tab === "rapporto" ? contentoPagina1 : contentoPagina2}
+</div>
+{/* Stampa: entrambe le pagine */}
+<div className="print-both">
+  {contentoPagina1}
+  {contentoPagina2}
+</div>
         </div>
       </div>
     </>

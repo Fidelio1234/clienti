@@ -1,1 +1,1 @@
-export const PASSWORD_ACCESSO = "dmi2024";
+export const PASSWORD_ACCESSO = "dmi2026";

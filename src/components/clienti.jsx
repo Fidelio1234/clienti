@@ -251,6 +251,29 @@ export default function Clienti() {
 
   const capTimerRef = useRef(null);
   const editCapTimerRef = useRef(null);
+  const [pivaVerificate, setPivaVerificate] = useState(new Set());
+
+  useEffect(() => {
+    async function caricaVerifiche() {
+      try {
+        const snap = await getDocs(collection(db, "storico_interventi"));
+        const piva = new Set();
+        snap.docs.forEach(d => {
+          const data = d.data();
+          console.log("tipoIntervento:", data.tipoIntervento, "piva:", data.pivaCliente);
+          const tipo = (data.tipoIntervento || "").toLowerCase();
+          if (tipo.includes("verifica periodica") || tipo.includes("attivazione e verifica")) {
+            if (data.pivaCliente) piva.add(data.pivaCliente);
+          }
+        });
+        setPivaVerificate(piva);
+      } catch (e) {
+        console.error("Errore carica verifiche:", e);
+      }
+    }
+    caricaVerifiche();
+  }, []);
+
 
   const emptyForm = {
     azienda: "", piva: "", indirizzo: "", citta: "",provincia: "",
@@ -542,7 +565,11 @@ export default function Clienti() {
                   filtered.map((c) => {
                     const realIdx = clienti.indexOf(c);
                     return (
-                      <tr key={realIdx} style={{ borderBottom: "0.5px solid #f0f0f0" }}>
+                      <tr key={realIdx} style={{
+  
+  background: pivaVerificate.has(c.piva) ? "#edfaf4" : "transparent",
+  borderBottom: "2px solid black",
+}}>
                         <td style={{ padding: "9px 10px", fontWeight: 500 }}>{esc(c.azienda)}</td>
                         <td style={{ padding: "9px 10px", fontWeight: 500 }}>{esc(c.piva)}</td>
                         <td style={{ padding: "9px 10px", color: c.indirizzo ? "#111" : "#ccc" }}>{esc(c.indirizzo) || "—"}</td>

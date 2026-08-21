@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-
+import FattureCliente from "./FattureCliente";
 
 import { db } from "../firebase";
 import {
@@ -248,10 +248,12 @@ export default function Clienti() {
   const [editCapLoading, setEditCapLoading] = useState(false);
   const [moduloCliente, setModuloCliente] = useState(null); // ← QUI, dentro il componente
   const [storicoCliente, setStoricoCliente] = useState(null);
-
   const capTimerRef = useRef(null);
   const editCapTimerRef = useRef(null);
   const [pivaVerificate, setPivaVerificate] = useState(new Set());
+ const [fattureCliente, setFattureCliente] = useState(null);
+ const [conteggiFatture, setConteggiFatture] = useState({});
+
 
   useEffect(() => {
     async function caricaVerifiche() {
@@ -301,6 +303,26 @@ export default function Clienti() {
     }
     caricaClienti();
   }, []);
+
+  useEffect(() => {
+    async function caricaConteggi() {
+      if (!clienti.length) return;
+      const conteggi = {};
+      await Promise.all(
+        clienti.map(async (c) => {
+          try {
+            const snap = await getDocs(collection(db, "clienti", c.id, "fatture"));
+            conteggi[c.id] = snap.size;
+          } catch (e) {
+            conteggi[c.id] = 0;
+          }
+        })
+      );
+      setConteggiFatture(conteggi);
+    }
+    caricaConteggi();
+  }, [clienti]);
+
 
 
 
@@ -610,6 +632,33 @@ export default function Clienti() {
                             >
                               📋 Storico
                             </button>
+
+                            <button
+  onClick={() => setFattureCliente(c)}
+  title="Fatture cliente"
+  style={{ ...btnIconStyle(), position: "relative" }}
+>
+  🧾 Fatture
+  {conteggiFatture[c.id] > 0 && (
+    <span style={{
+      position: "absolute",
+      top: -4, right: -4,
+      minWidth: 16, height: 16,
+      background: "#185fa5",
+      color: "#fff",
+      fontSize: 10,
+      fontWeight: 600,
+      borderRadius: 99,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "0 4px",
+      lineHeight: 1,
+    }}>
+      {conteggiFatture[c.id]}
+    </span>
+  )}
+</button>
                           </div>
                         </td>
                       </tr>
@@ -697,6 +746,22 @@ export default function Clienti() {
           onClose={() => setStoricoCliente(null)}
         />
       )}
+
+{fattureCliente && (
+  <FattureCliente
+    cliente={fattureCliente}
+    onClose={async () => {
+      // Aggiorna conteggio badge per questo cliente
+      try {
+        const snap = await getDocs(collection(db, "clienti", fattureCliente.id, "fatture"));
+        setConteggiFatture((prev) => ({ ...prev, [fattureCliente.id]: snap.size }));
+      } catch (e) {}
+      setFattureCliente(null);
+    }}
+  />
+)}
+
+
 
       {/* Toast */}
       {toast && (
